@@ -1,0 +1,104 @@
+version: 1
+applications:
+  - appRoot: .
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - echo "Installing Python dependencies..."
+            - python -m pip install --upgrade pip
+            - pip install -r requirements.txt
+        build:
+          commands:
+            - echo "Building static frontend assets..."
+            - mkdir -p dist
+            - cp -r static/* dist/
+            - echo "Frontend build completed"
+        postBuild:
+          commands:
+            - echo "Post-build cleanup completed"
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - ~/.cache/pip/**/*
+    backend:
+      phases:
+        preBuild:
+          commands:
+            - echo "Setting up Python backend environment..."
+            - python --version
+            - pip --version
+            - echo "Installing backend dependencies..."
+            - pip install -r requirements.txt
+            - echo "Setting up environment variables..."
+        build:
+          commands:
+            - echo "Building backend application..."
+            - echo "Validating API endpoints..."
+            - python -c "from api.main import app; print('FastAPI app loaded successfully')"
+            - echo "Backend build completed"
+        postBuild:
+          commands:
+            - echo "Backend post-build completed"
+      artifacts:
+        baseDirectory: .
+        files:
+          - api/**/*
+          - src/**/*
+          - config/**/*
+          - tools/**/*
+          - start_api.py
+          - requirements.txt
+          - amplify.yml
+      cache:
+        paths:
+          - ~/.cache/pip/**/*
+    environment:
+      variables:
+        # Python configuration
+        PYTHONPATH: "."
+        PYTHON_VERSION: "3.11"
+        
+        # Application settings
+        ENV: "production"
+        DEBUG: "False"
+        
+        # Database configuration (use Amplify environment variables)
+        # SERVER_HOSTNAME: Set in Amplify Console
+        # HTTP_PATH: Set in Amplify Console  
+        # ACCESS_TOKEN: Set in Amplify Console
+        
+        # AWS configuration (will be set by Amplify)
+        # AWS_ACCESS_KEY_ID: Set in Amplify Console
+        # AWS_SECRET_ACCESS_KEY: Set in Amplify Console
+        # AWS_SESSION_TOKEN: Set in Amplify Console
+        
+        # API Keys (set in Amplify Console Environment Variables)
+        # OPENAI_API_KEY: Set in Amplify Console
+        # LANGCHAIN_API_KEY: Set in Amplify Console
+        
+        # Application specific
+        LANGCHAIN_TRACING_V2: "false"
+        LANGCHAIN_PROJECT: "motor-parts-api"
+        
+        # FastAPI settings
+        FASTAPI_ENV: "production"
+        API_HOST: "0.0.0.0"
+        API_PORT: "8000"
+    
+    # Custom commands for container-based deployment
+    customCommands:
+      - echo "Starting Motor Parts Processing API..."
+      - python start_api.py &
+      - echo "API server started in background"
+      
+    # Health check configuration
+    healthCheck:
+      path: "/health"
+      intervalSeconds: 30
+      timeoutSeconds: 5
+      unhealthyThresholdCount: 3
+      healthyThresholdCount: 2
