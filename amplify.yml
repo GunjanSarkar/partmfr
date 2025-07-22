@@ -77,28 +77,24 @@ applications:
         ENV: "production"
         DEBUG: "False"
         
-        # Database configuration (use Amplify environment variables)
-        # SERVER_HOSTNAME: Set in Amplify Console
-        # HTTP_PATH: Set in Amplify Console  
-        # ACCESS_TOKEN: Set in Amplify Console
-        
-        # AWS configuration (will be set by Amplify)
-        # AWS_ACCESS_KEY_ID: Set in Amplify Console
-        # AWS_SECRET_ACCESS_KEY: Set in Amplify Console
-        # AWS_SESSION_TOKEN: Set in Amplify Console
-        
-        # API Keys (set in Amplify Console Environment Variables)
-        # OPENAI_API_KEY: Set in Amplify Console
-        # LANGCHAIN_API_KEY: Set in Amplify Console
+        # FastAPI settings
+        FASTAPI_ENV: "production"
+        API_HOST: "0.0.0.0"
+        API_PORT: "8000"
         
         # Application specific
         LANGCHAIN_TRACING_V2: "false"
         LANGCHAIN_PROJECT: "motor-parts-api"
         
-        # FastAPI settings
-        FASTAPI_ENV: "production"
-        API_HOST: "0.0.0.0"
-        API_PORT: "8000"
+      # IMPORTANT: Set these sensitive variables in Amplify Console Environment Variables:
+      # - OPENAI_API_KEY: Your OpenAI API key
+      # - LANGCHAIN_API_KEY: Your LangChain API key  
+      # - SERVER_HOSTNAME: dbc-73ecee4a-e5cc.cloud.databricks.com
+      # - HTTP_PATH: /sql/1.0/warehouses/6d66dae205b7527d
+      # - ACCESS_TOKEN: Your Databricks access token
+      # - AWS_ACCESS_KEY_ID: Your AWS access key (if needed)
+      # - AWS_SECRET_ACCESS_KEY: Your AWS secret key (if needed)
+      # - AWS_SESSION_TOKEN: Your AWS session token (if needed)
     
     # Custom commands for container-based deployment
     customCommands:
