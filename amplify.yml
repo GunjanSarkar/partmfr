@@ -5,17 +5,28 @@ applications:
       phases:
         preBuild:
           commands:
-            - echo "Installing Python dependencies..."
-            - python -m pip install --upgrade pip
-            - pip install -r requirements.txt
+            - echo "Preparing frontend build environment..."
+            - node --version || echo "Node.js not available, using basic copy"
         build:
           commands:
             - echo "Building static frontend assets..."
             - mkdir -p dist
             - cp -r static/* dist/
+            - echo "Copying Amplify configuration files..."
+            - cp _redirects dist/_redirects 2>/dev/null || echo "No _redirects file found"
+            - cp _headers dist/_headers 2>/dev/null || echo "No _headers file found"
+            - echo "Setting correct file permissions..."
+            - find dist -type f -name "*.css" -exec chmod 644 {} \;
+            - find dist -type f -name "*.js" -exec chmod 644 {} \;
+            - find dist -type f -name "*.html" -exec chmod 644 {} \;
             - echo "Frontend build completed"
+            - ls -la dist/
         postBuild:
           commands:
+            - echo "Verifying static assets..."
+            - test -f dist/index.html && echo "✓ index.html found"
+            - test -f dist/styles.css && echo "✓ styles.css found"
+            - test -f dist/script.js && echo "✓ script.js found"
             - echo "Post-build cleanup completed"
       artifacts:
         baseDirectory: dist

@@ -31,6 +31,10 @@ config/cache/
 # Github instructions
 .github/
 
+# Amplify configuration files (needed for deployment)
+!_redirects
+!_headers
+
 # Virtual Environment
 venv/
 env/
