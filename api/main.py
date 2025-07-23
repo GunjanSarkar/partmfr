@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional, Union
 import json
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import time
 import io
@@ -1306,6 +1307,13 @@ async def process_single_part_async(part_data: Dict[str, Any], processor) -> Dic
             "description": part_data.get("description", ""),
             "error": str(e)
         }
+
+app.add_middleware(CORSMiddleware,
+    allow_origins=["*"],  # Allow your frontend domain in prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 if __name__ == "__main__":
     import uvicorn
