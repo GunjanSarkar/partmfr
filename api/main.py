@@ -1309,7 +1309,7 @@ async def process_single_part_async(part_data: Dict[str, Any], processor) -> Dic
         }
 
 app.add_middleware(CORSMiddleware,
-    allow_origins=["*"],  # Allow your frontend domain in prod
+    allow_origins=["https://main.d156bsqmhzf90z.amplifyapp.com"],# Allow your frontend domain in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
