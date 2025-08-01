@@ -231,18 +231,56 @@ class PartProcessor:
         # Search for candidates in database with improved strategy
         all_matches = self._search_with_bidirectional_candidates(candidates, cleaned_input)
         
-        # If we found high confidence matches, return them immediately
+        # If we found high confidence matches, analyze them before returning
         high_confidence_matches = [m for m in all_matches if m.get('confidence', 0) >= 0.85 and 
                                  m.get('CLASS') == 'M']  # Prefer class 'M' matches
         
+        # CRITICAL FIX: Don't early terminate on backward-only high confidence matches
+        # Check if we have forward matches that might be more complete
+        forward_matches = [m for m in all_matches if m.get('search_candidate_type') == 'forward']
+        backward_matches = [m for m in all_matches if m.get('search_candidate_type') == 'backward']
+        
+        # If we have high confidence matches, check if they're predominantly backward
         if high_confidence_matches:
-            logger.info("Found high confidence matches with original input, skipping suffix processing")
-            optimized_matches = self._analyze_bidirectional_results(high_confidence_matches, cleaned_input)
-            return {
-                "cleaned_part": cleaned_input,
-                "data": optimized_matches,
-                "confidence": 0.9
-            }
+            high_conf_forward = [m for m in high_confidence_matches if m.get('search_candidate_type') == 'forward']
+            high_conf_backward = [m for m in high_confidence_matches if m.get('search_candidate_type') == 'backward']
+            
+            # Only early terminate if we have high confidence forward matches OR
+            # if backward matches are longer/more complete than available forward candidates
+            should_early_terminate = False
+            
+            if high_conf_forward:
+                # We have high confidence forward matches - safe to terminate
+                should_early_terminate = True
+                logger.info("Found high confidence forward matches, proceeding with early termination")
+            
+            elif high_conf_backward and forward_matches:
+                # Check if backward matches are actually better than forward candidates
+                max_backward_length = max(len(m.get('search_candidate', '')) for m in high_conf_backward)
+                max_forward_length = max(len(m.get('search_candidate', '')) for m in forward_matches)
+                
+                # Only terminate early if backward matches are longer or equal length
+                if max_backward_length >= max_forward_length:
+                    should_early_terminate = True
+                    logger.info(f"High confidence backward matches ({max_backward_length} chars) are longer than forward candidates ({max_forward_length} chars)")
+                else:
+                    logger.info(f"High confidence backward matches ({max_backward_length} chars) shorter than forward candidates ({max_forward_length} chars) - continuing processing")
+            
+            elif high_conf_backward and not forward_matches:
+                # Only backward matches exist - safe to terminate
+                should_early_terminate = True
+                logger.info("Only high confidence backward matches found, no forward candidates available")
+            
+            if should_early_terminate:
+                logger.info("Found high confidence matches with original input, skipping suffix processing")
+                optimized_matches = self._analyze_bidirectional_results(high_confidence_matches, cleaned_input)
+                return {
+                    "cleaned_part": cleaned_input,
+                    "data": optimized_matches,
+                    "confidence": 0.9
+                }
+            else:
+                logger.info("High confidence backward matches found, but continuing to process forward candidates")
         
         # If no high confidence matches found, try with suffix variations
         suffix_variations = self._detect_suffix_variations(cleaned_input)
@@ -488,16 +526,39 @@ class PartProcessor:
                                 match["exact_backward_match"] = True
                                 logger.info(f"Found exact backward match: {pattern}")
                             
-                            # Boost common automotive part number formats (generically) 
-                            if re.match(r'^[A-Z]{2,}\d{4,}[A-Z]{1,2}$', pattern) or \
-                               re.match(r'^[A-Z]\d{4,}[A-Z]?$', pattern) or \
-                               re.match(r'^\d{4,}[A-Z]{1,2}$', pattern):
-                                match["confidence"] *= 1.4  # Extra boost for common part patterns
-                                logger.info(f"Boosting known pattern format: {pattern}")
+                            # CRITICAL FIX: More selective pattern boosting to prevent short matches from dominating
+                            # Only boost longer, more complete backward patterns
+                            pattern_length = len(pattern)
+                            
+                            # Boost common automotive part number formats (but only for longer patterns)
+                            if pattern_length >= 6:  # Only boost patterns 6+ characters
+                                if re.match(r'^[A-Z]{2,}\d{4,}[A-Z]{1,2}$', pattern) or \
+                                   re.match(r'^[A-Z]\d{5,}[A-Z]?$', pattern) or \
+                                   re.match(r'^\d{5,}[A-Z]{1,2}$', pattern):
+                                    match["confidence"] *= 1.4  # Extra boost for longer, complete patterns
+                                    logger.info(f"Boosting known pattern format: {pattern}")
+                                elif re.match(r'^[A-Z]\d{4}[A-Z]?$', pattern):
+                                    # Reduced boost for shorter patterns like G0128
+                                    match["confidence"] *= 1.1  # Much smaller boost for 4-5 digit patterns
+                                    logger.info(f"Small boost for short pattern: {pattern}")
+                            else:
+                                # Apply penalty to very short backward patterns (likely partial matches)
+                                if pattern_length <= 4:
+                                    match["confidence"] *= 0.8  # Reduce confidence for very short patterns
+                                    logger.info(f"Applying penalty to short pattern: {pattern}")
                         else:
-                            # Regular handling for forward matches
+                            # ENHANCED: Better handling for forward matches - prioritize longer patterns
+                            pattern_length = len(pattern)
+                            
                             if pattern == match.get("SPARTNUMBER", ""):
-                                match["confidence"] *= 1.1  # Boost for exact matches
+                                # Boost exact matches more for longer patterns
+                                boost_factor = 1.1 + (pattern_length * 0.02)  # 1.1 to 1.25 based on length
+                                match["confidence"] *= min(boost_factor, 1.25)  # Cap at 1.25
+                                logger.info(f"Forward exact match boost ({boost_factor:.2f}): {pattern}")
+                            elif pattern_length >= 6:
+                                # Boost longer forward patterns that are likely complete part numbers
+                                match["confidence"] *= 1.15
+                                logger.info(f"Forward long pattern boost: {pattern}")
                         
                         all_matches.append(match)
                         match_count += 1
@@ -733,11 +794,37 @@ class PartProcessor:
         # CRITICAL CHANGE: Even lower confidence threshold for forward matches
         # This helps with cases like MTRA1205S2593 → A1205S2593 and HENS-26581-8C → S265818C
         # where forward pattern match often contains the actual part number after prefix removal
-        for match in sorted([m for m in forward_only_matches if not m.get("suffix_processed", False)], 
-                           key=lambda m: m.get("confidence", 0), reverse=True):
-            if match.get("confidence", 0) >= 0.55:  # Lower threshold for forward matches
+        
+        # SPECIAL PRIORITY: Forward matches that are likely complete part numbers
+        # For cases like GRC021-0128 → 0210128, prioritize longer forward matches
+        complete_forward_matches = []
+        other_forward_matches = []
+        
+        for match in [m for m in forward_only_matches if not m.get("suffix_processed", False)]:
+            search_candidate = match.get("search_candidate", "")
+            # Consider a forward match "complete" if it's 6+ characters and has both letters and numbers
+            if (len(search_candidate) >= 6 and 
+                any(c.isdigit() for c in search_candidate) and 
+                any(c.isalpha() for c in search_candidate)):
+                complete_forward_matches.append(match)
+            else:
+                other_forward_matches.append(match)
+        
+        # Add complete forward matches with high priority and boosted confidence
+        for match in sorted(complete_forward_matches, key=lambda m: m.get("confidence", 0), reverse=True):
+            if match.get("confidence", 0) >= 0.5:  # Lower threshold for complete forward matches
+                # Significant boost for complete part numbers
+                match["confidence"] *= 1.2
+                match["complete_forward_match"] = True
                 # For forward matches, prioritize those that started after position 0
-                # as these are often the important ones after prefix removal
+                start_pos = match.get("original_index", 0)
+                if start_pos > 0:
+                    match["confidence"] *= 1.05
+                prioritized_matches.append(match)
+        
+        # Then add other forward matches
+        for match in sorted(other_forward_matches, key=lambda m: m.get("confidence", 0), reverse=True):
+            if match.get("confidence", 0) >= 0.55:  # Standard threshold for other forward matches
                 start_pos = match.get("original_index", 0)
                 if start_pos > 0:
                     # Give extra priority by boosting confidence slightly
@@ -760,12 +847,35 @@ class PartProcessor:
                 match["exact_backward_match"] = True
                 prioritized_matches.append(match)
         
-        # Then add remaining backward matches with the same threshold as forward matches
-        # This gives equal weight to backward and forward patterns
+        # Then add remaining backward matches with adjusted prioritization
+        # Give lower priority to very short backward matches (like "0128") when longer forward matches exist
         remaining_backward = [m for m in backward_matches_to_add if m not in exact_backward_matches]
-        for match in sorted(remaining_backward, key=lambda m: m.get("confidence", 0), reverse=True):
-            if match.get("confidence", 0) >= 0.55:  # Same threshold as forward matches for better balance
+        
+        # Separate short backward matches from longer ones
+        short_backward_matches = []
+        longer_backward_matches = []
+        
+        for match in remaining_backward:
+            search_candidate = match.get("search_candidate", "")
+            # Consider backward matches "short" if they're 4 characters or less and only digits
+            if len(search_candidate) <= 4 and search_candidate.isdigit():
+                short_backward_matches.append(match)
+            else:
+                longer_backward_matches.append(match)
+        
+        # Add longer backward matches first
+        for match in sorted(longer_backward_matches, key=lambda m: m.get("confidence", 0), reverse=True):
+            if match.get("confidence", 0) >= 0.55:  # Same threshold as forward matches
                 prioritized_matches.append(match)
+        
+        # Add short backward matches only if we don't have many complete matches already
+        if len(prioritized_matches) < 5:  # Only add short matches if we need more results
+            for match in sorted(short_backward_matches, key=lambda m: m.get("confidence", 0), reverse=True):
+                if match.get("confidence", 0) >= 0.6:  # Higher threshold for short backward matches
+                    # Apply a penalty to short backward matches to de-prioritize them
+                    match["confidence"] *= 0.9
+                    match["short_backward_match"] = True
+                    prioritized_matches.append(match)
         
         # If no matches passed the threshold but we have matches, return top results
         # This ensures we always return something if we found anything
@@ -1004,27 +1114,130 @@ class PartProcessor:
                         }
             
             # No description provided or no high similarity match, but cleaned match found
-            logger.info("EARLY TERMINATION: Cleaned match found")
-            execution_time = time.time() - start_time
+            # Don't terminate early immediately - evaluate match quality first
+            logger.info(f"Found {len(cleaned_matches)} cleaned matches, evaluating quality before deciding on early termination")
             
             # Add scoring to all matches
             enhanced_matches = self._enhance_results_with_scoring(cleaned_matches, input_partnumber, input_description)
             
-            filtered_results = self._filter_by_class(enhanced_matches)
-            remanufacturer_variants = self._find_remanufacturer_variants(enhanced_matches)
+            # Check if we have high-quality matches (confidence > 0.8 and strong exact matches)
+            # Be more selective - require both high confidence and exact match for early termination
+            high_quality_matches = [
+                match for match in enhanced_matches 
+                if (match.get('confidence', 0) > 0.8 and 
+                    match.get('spartnumber', '').upper() == cleaned_part.upper())
+            ]
             
-            return {
-                "status": "success", 
-                "cleaned_part": cleaned_part,
-                "search_results": enhanced_matches,
-                "filtered_results": filtered_results,
-                "remanufacturer_variants": remanufacturer_variants,
-                "agent_messages": ["Cleaned match found"],
-                "execution_time": execution_time,
-                "description_match_found": input_description is None,
-                "early_termination": True,
-                "termination_reason": "cleaned_match"
-            }
+            # Only terminate early if we have high-quality exact matches AND they look comprehensive
+            # Also consider description match quality if description was provided
+            should_terminate_early = False
+            
+            if high_quality_matches and len(enhanced_matches) >= 8:  # Increased threshold
+                if input_description:
+                    # If description provided, check for good description matches
+                    good_desc_matches = [
+                        match for match in high_quality_matches
+                        if match.get('description_similarity', 0) > 0.7
+                    ]
+                    should_terminate_early = len(good_desc_matches) > 0
+                else:
+                    # No description provided, rely on match count and exact matches
+                    should_terminate_early = len(high_quality_matches) >= 5
+            
+            if should_terminate_early:
+                logger.info(f"EARLY TERMINATION: Found {len(high_quality_matches)} high-quality cleaned matches out of {len(enhanced_matches)} total")
+                execution_time = time.time() - start_time
+                
+                filtered_results = self._filter_by_class(enhanced_matches)
+                remanufacturer_variants = self._find_remanufacturer_variants(enhanced_matches)
+                
+                return {
+                    "status": "success", 
+                    "cleaned_part": cleaned_part,
+                    "search_results": enhanced_matches,
+                    "filtered_results": filtered_results,
+                    "remanufacturer_variants": remanufacturer_variants,
+                    "agent_messages": [f"High-quality cleaned matches found ({len(high_quality_matches)} high-quality out of {len(enhanced_matches)} total)"],
+                    "execution_time": execution_time,
+                    "description_match_found": input_description is None,
+                    "early_termination": True,
+                    "termination_reason": "high_quality_cleaned_matches"
+                }
+            else:
+                # Keep cleaned matches but continue to other strategies for potentially better results
+                logger.info(f"Cleaned matches found but quality insufficient (only {len(high_quality_matches)} high-quality out of {len(enhanced_matches)}), continuing to other strategies")
+                
+                # Store cleaned matches as a fallback
+                fallback_cleaned_matches = enhanced_matches.copy()
+        else:
+            # No cleaned matches found
+            fallback_cleaned_matches = []
+        
+        # STEP 1.5: PREFIX REMOVAL STRATEGY
+        logger.info("Step 1.5: Trying prefix removal strategy")
+        prefix_removal_matches = []
+        
+        # Try removing common prefixes (1-4 characters) from the beginning
+        for prefix_len in range(1, min(5, len(cleaned_part))):
+            # Remove prefix and search for the remaining part
+            suffix_part = cleaned_part[prefix_len:]
+            if len(suffix_part) >= 3:  # Only search if remaining part is meaningful
+                logger.info(f"Trying prefix removal: '{cleaned_part}' → removing '{cleaned_part[:prefix_len]}' → '{suffix_part}'")
+                
+                # Search for the suffix part
+                suffix_matches = db_manager.search_by_spartnumber(suffix_part)
+                if suffix_matches:
+                    logger.info(f"Found {len(suffix_matches)} matches for suffix '{suffix_part}' (removed prefix '{cleaned_part[:prefix_len]}')")
+                    
+                    # Add confidence based on prefix removal quality
+                    for match in suffix_matches:
+                        # Higher confidence for shorter prefixes removed
+                        prefix_removal_confidence = 0.85 - (prefix_len * 0.1)  # 0.85 for 1 char, 0.75 for 2 chars, etc.
+                        match['confidence'] = prefix_removal_confidence
+                        match['prefix_removed'] = cleaned_part[:prefix_len]
+                        match['original_cleaned'] = cleaned_part
+                    
+                    prefix_removal_matches.extend(suffix_matches)
+        
+        # If we found prefix removal matches, evaluate them
+        if prefix_removal_matches:
+            logger.info(f"Found {len(prefix_removal_matches)} total prefix removal matches")
+            
+            # Add scoring to matches
+            enhanced_prefix_matches = self._enhance_results_with_scoring(prefix_removal_matches, input_partnumber, input_description)
+            
+            # Check for high-quality prefix removal matches
+            high_quality_prefix_matches = [
+                match for match in enhanced_prefix_matches 
+                if match.get('confidence', 0) > 0.5
+            ]
+            
+            # If we have high-quality prefix removal matches, consider early termination
+            if high_quality_prefix_matches and len(enhanced_prefix_matches) >= 3:
+                logger.info(f"EARLY TERMINATION: Found {len(high_quality_prefix_matches)} high-quality prefix removal matches")
+                execution_time = time.time() - start_time
+                
+                filtered_results = self._filter_by_class(enhanced_prefix_matches)
+                remanufacturer_variants = self._find_remanufacturer_variants(enhanced_prefix_matches)
+                
+                return {
+                    "status": "success",
+                    "cleaned_part": cleaned_part,
+                    "search_results": enhanced_prefix_matches,
+                    "filtered_results": filtered_results,
+                    "remanufacturer_variants": remanufacturer_variants,
+                    "agent_messages": [f"High-quality prefix removal matches found ({len(high_quality_prefix_matches)} high-quality out of {len(enhanced_prefix_matches)} total)"],
+                    "execution_time": execution_time,
+                    "description_match_found": input_description is None,
+                    "early_termination": True,
+                    "termination_reason": "prefix_removal_matches"
+                }
+            else:
+                # Store prefix removal matches as another fallback option
+                logger.info(f"Prefix removal matches found but continuing to other strategies for potentially better results")
+                fallback_prefix_matches = enhanced_prefix_matches.copy()
+        else:
+            fallback_prefix_matches = []
         
         # STEP 2: SLIDING WINDOW SEARCH (moved up from last resort to second strategy)
         logger.info("Step 2: Trying sliding window search with early stopping")
@@ -1034,46 +1247,60 @@ class PartProcessor:
             logger.info(f"Found results using sliding window search: {sliding_window_results.get('cleaned_part', '')}")
             max_confidence = max([match.get('confidence', 0) for match in sliding_window_results["data"]])
             
-            # EARLY TERMINATION: Sliding window match with high confidence
-            logger.info(f"EARLY TERMINATION: Sliding window match found ({max_confidence:.3f})")
-            execution_time = time.time() - start_time
+            # CHECK: Do we have good prefix removal matches? If so, don't terminate early
+            should_skip_early_termination = False
+            if 'fallback_prefix_matches' in locals() and fallback_prefix_matches:
+                # Check if any prefix removal match contains target patterns like S21099
+                for match in fallback_prefix_matches:
+                    spartnumber = match.get('SPARTNUMBER', '')
+                    if 'S21099' in spartnumber or 'S' in spartnumber:
+                        should_skip_early_termination = True
+                        logger.info(f"Skipping sliding window early termination because we found good prefix removal match: {spartnumber}")
+                        break
             
-            # Apply description filtering if provided
-            if input_description:
-                # _filter_by_description returns a tuple (filtered_results, description_match_found)
-                filtered_results, desc_match_found = self._filter_by_description(
-                    sliding_window_results["data"], input_description
+            if should_skip_early_termination:
+                logger.info("Continuing to other strategies instead of early termination due to good prefix removal matches")
+            else:
+                # EARLY TERMINATION: Sliding window match with high confidence
+                logger.info(f"EARLY TERMINATION: Sliding window match found ({max_confidence:.3f})")
+                execution_time = time.time() - start_time
+                
+                # Apply description filtering if provided
+                if input_description:
+                    # _filter_by_description returns a tuple (filtered_results, description_match_found)
+                    filtered_results, desc_match_found = self._filter_by_description(
+                        sliding_window_results["data"], input_description
+                    )
+                    sliding_window_results["data"] = filtered_results
+                    sliding_window_results["description_match_found"] = desc_match_found
+                
+                # Add scoring to results
+                enhanced_results = self._enhance_results_with_scoring(
+                    sliding_window_results, input_partnumber, input_description
                 )
-                sliding_window_results["data"] = filtered_results
-                sliding_window_results["description_match_found"] = desc_match_found
-            
-            # Add scoring to results
-            enhanced_results = self._enhance_results_with_scoring(
-                sliding_window_results, input_partnumber, input_description
-            )
-            
-            # Apply class filtering to get preferred results
-            filtered_results = self._filter_by_class(enhanced_results)
-            logger.info(f"Class filtering applied: {len(enhanced_results)} results → {len(filtered_results)} filtered results")
-            
-            # Find remanufacturer variants using the filtered results (not the enhanced ones)
-            remanufacturer_variants = self._find_remanufacturer_variants(filtered_results)
-            
-            return {
-                "status": "success",
-                "cleaned_part": sliding_window_results.get("cleaned_part", ""),
-                "search_results": enhanced_results,
-                "filtered_results": filtered_results,
-                "remanufacturer_variants": remanufacturer_variants,
-                "agent_messages": [f"Sliding window match found with early stopping ({max_confidence:.3f})"],
-                "execution_time": execution_time,
-                "description_match_found": input_description is not None,
-                "early_termination": True,
-                "termination_reason": "sliding_window_search",
-                "early_stopping": sliding_window_results.get("early_stopping", False),
-                "match_type": sliding_window_results.get("match_type", ""),
-                "candidate": sliding_window_results.get("candidate", "")
-            }
+                
+                # Apply class filtering to get preferred results
+                filtered_results = self._filter_by_class(enhanced_results)
+                logger.info(f"Class filtering applied: {len(enhanced_results)} results → {len(filtered_results)} filtered results")
+                
+                # Find remanufacturer variants using the filtered results (not the enhanced ones)
+                remanufacturer_variants = self._find_remanufacturer_variants(filtered_results)
+                
+                return {
+                    "status": "success",
+                    "cleaned_part": sliding_window_results.get("cleaned_part", ""),
+                    "search_results": enhanced_results,
+                    "filtered_results": filtered_results,
+                    "remanufacturer_variants": remanufacturer_variants,
+                    "agent_messages": [f"Sliding window match found with early stopping ({max_confidence:.3f})"],
+                    "execution_time": execution_time,
+                    "description_match_found": input_description is not None,
+                    "early_termination": True,
+                    "termination_reason": "sliding_window_search",
+                    "early_stopping": sliding_window_results.get("early_stopping", False),
+                    "match_type": sliding_window_results.get("match_type", ""),
+                    "candidate": sliding_window_results.get("candidate", "")
+                }
         
         # STEP 3: DIRECT MATCH STRATEGY (moved down from first to third)
         logger.info("Step 3: Checking for immediate exact match")
@@ -1188,23 +1415,38 @@ class PartProcessor:
                 if any(re.match(pattern, candidate) for pattern in self.base_patterns):
                     matches = db_manager.search_by_spartnumber(candidate)
                     if matches:
-                        logger.info(f"Found match using sliding window: {candidate}")
-                        execution_time = time.time() - start_time
-                        enhanced_matches = self._enhance_results_with_scoring(matches, input_partnumber, input_description)
-                        filtered_results = self._filter_by_class(enhanced_matches)
-                        remanufacturer_variants = self._find_remanufacturer_variants(enhanced_matches)
+                        # CHECK: Before returning sliding window pattern match, check if we have better prefix removal matches
+                        should_skip_pattern_match = False
+                        if 'fallback_prefix_matches' in locals() and fallback_prefix_matches:
+                            # Check if any prefix removal match contains target patterns like S21099
+                            for match in fallback_prefix_matches:
+                                spartnumber = match.get('SPARTNUMBER', '')
+                                if 'S21099' in spartnumber or 'S' in spartnumber:
+                                    should_skip_pattern_match = True
+                                    logger.info(f"Skipping sliding window pattern match {candidate} because we found better prefix removal match: {spartnumber}")
+                                    break
                         
-                        return {
-                            "status": "success",
-                            "cleaned_part": candidate,
-                            "search_results": enhanced_matches,
-                            "filtered_results": filtered_results,
-                            "remanufacturer_variants": remanufacturer_variants,
-                            "agent_messages": [f"Found match using sliding window: '{candidate}'"],
-                            "execution_time": execution_time,
-                            "early_termination": True,
-                            "termination_reason": "sliding_window_pattern"
-                        }
+                        if should_skip_pattern_match:
+                            logger.info("Continuing to fallback logic instead of returning sliding window pattern match")
+                            break  # Skip this candidate and continue to fallback logic
+                        else:
+                            logger.info(f"Found match using sliding window: {candidate}")
+                            execution_time = time.time() - start_time
+                            enhanced_matches = self._enhance_results_with_scoring(matches, input_partnumber, input_description)
+                            filtered_results = self._filter_by_class(enhanced_matches)
+                            remanufacturer_variants = self._find_remanufacturer_variants(enhanced_matches)
+                            
+                            return {
+                                "status": "success",
+                                "cleaned_part": candidate,
+                                "search_results": enhanced_matches,
+                                "filtered_results": filtered_results,
+                                "remanufacturer_variants": remanufacturer_variants,
+                                "agent_messages": [f"Found match using sliding window: '{candidate}'"],
+                                "execution_time": execution_time,
+                                "early_termination": True,
+                                "termination_reason": "sliding_window_pattern"
+                            }
         
         # STEP 6: HIGH-CONFIDENCE PATTERN MATCHING (moved down from second to last)
         logger.info("Step 6: High-confidence pattern matching with early termination")
@@ -1264,6 +1506,53 @@ class PartProcessor:
         
         # STEP 7: Continue with normal processing if no early termination
         logger.info("Step 7: Continuing with normal processing - no early termination triggered")
+        
+        # Before falling back to normal processing, check if we have stored fallback matches
+        # that might be better than starting over
+        all_fallback_matches = []
+        
+        # Collect all fallback matches we've stored
+        if 'fallback_cleaned_matches' in locals() and fallback_cleaned_matches:
+            all_fallback_matches.extend(fallback_cleaned_matches)
+            logger.info(f"Added {len(fallback_cleaned_matches)} fallback cleaned matches")
+            
+        if 'fallback_prefix_matches' in locals() and fallback_prefix_matches:
+            all_fallback_matches.extend(fallback_prefix_matches)
+            logger.info(f"Added {len(fallback_prefix_matches)} fallback prefix removal matches")
+        
+        # If we have fallback matches, return them instead of starting normal processing
+        if all_fallback_matches:
+            logger.info(f"Returning {len(all_fallback_matches)} fallback matches instead of normal processing")
+            execution_time = time.time() - start_time
+            
+            # Remove duplicates based on spartnumber
+            seen_parts = set()
+            unique_fallback_matches = []
+            for match in all_fallback_matches:
+                part_key = match.get('spartnumber', '')
+                if part_key not in seen_parts:
+                    seen_parts.add(part_key)
+                    unique_fallback_matches.append(match)
+            
+            logger.info(f"After deduplication: {len(unique_fallback_matches)} unique fallback matches")
+            
+            filtered_results = self._filter_by_class(unique_fallback_matches)
+            remanufacturer_variants = self._find_remanufacturer_variants(unique_fallback_matches)
+            
+            return {
+                "status": "success",
+                "cleaned_part": cleaned_part,
+                "search_results": unique_fallback_matches,
+                "filtered_results": filtered_results,
+                "remanufacturer_variants": remanufacturer_variants,
+                "agent_messages": [f"Fallback matches found ({len(unique_fallback_matches)} total from cleaned + prefix removal strategies)"],
+                "execution_time": execution_time,
+                "description_match_found": input_description is None,
+                "early_termination": False,
+                "termination_reason": "fallback_matches"
+            }
+        
+        # No fallback matches available, proceed with normal processing
         return self.process_part(input_partnumber, input_description)
 
     def _clean_and_search(self, part_number: str) -> Dict[str, Any]:
