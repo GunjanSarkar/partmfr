@@ -1,0 +1,14 @@
+[
+  {
+    "source": "/<*>",
+    "target": "/index.html",
+    "status": "404-200",
+    "condition": null
+  },
+  {
+    "source": "/api/<*>",
+    "target": "https://your-api-domain.com/api/<*>",
+    "status": "200",
+    "condition": null
+  }
+]

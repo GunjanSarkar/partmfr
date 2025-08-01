@@ -1,0 +1,57 @@
+version: 1
+backend:
+  phases:
+    preBuild:
+      commands:
+        - echo "Motor Parts API - Pre-build phase"
+        - python --version
+        - pip install --upgrade pip
+        - pip install -r requirements.txt
+    build:
+      commands:
+        - echo "Motor Parts API - Build phase"
+        - echo "Validating application structure..."
+        - python -c "import src.processor; print('Processor module loaded')"
+        - python -c "from api.main import app; print('FastAPI app initialized')"
+        - echo "Build completed successfully"
+    postBuild:
+      commands:
+        - echo "Motor Parts API - Post-build phase completed"
+  artifacts:
+    files:
+      - '**/*'
+    name: motor-parts-api
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - echo "Preparing static frontend files"
+    build:
+      commands:
+        - echo "Copying static assets"
+        - mkdir -p build
+        - cp -r static/* build/
+    postBuild:
+      commands:
+        - echo "Frontend build completed"
+  artifacts:
+    baseDirectory: build
+    files:
+      - '**/*'
+test:
+  phases:
+    preTest:
+      commands:
+        - echo "Setting up test environment"
+    test:
+      commands:
+        - echo "Running basic validation tests"
+        - python -c "from src.database import DatabaseManager; print('Database module validated')"
+        - python -c "from tools.scoring_system import ScoringSystem; print('Scoring system validated')"
+    postTest:
+      commands:
+        - echo "Test phase completed"
+cache:
+  paths:
+    - ~/.cache/pip/**/*
+    - __pycache__/**/*

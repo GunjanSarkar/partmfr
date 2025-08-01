@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Part Number Lookup System</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>    <div class="container">
+        <header>
+            <h1>Part Number Lookup System</h1>
+            <p>Enter a part number to search for manufacturer records or upload a file for batch processing</p>
+            <div class="api-info">
+                <a href="/docs" target="_blank">API Documentation</a> | 
+                <a href="/redoc" target="_blank">ReDoc</a> | 
+                <a href="/api/unified" target="_blank">Unified API</a>
+            </div>
+        </header>
+
+        <main>
+            <div class="search-section">
+                <div class="search-tabs">
+                    <button id="singleSearchTab" class="tab-btn active">Single Search</button>
+                    <button id="batchProcessingTab" class="tab-btn">Batch Processing</button>
+                </div>
+                  <div id="singleSearchPanel" class="panel">
+                    <div class="input-group">
+                        <label for="partNumber">Part Number:</label>
+                        <input 
+                            type="text" 
+                            id="partNumber" 
+                            placeholder="Enter part number (e.g., 0-124-625-098)"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <div class="input-group">
+                        <label for="partDescription">Part Description (optional):</label>
+                        <input 
+                            type="text" 
+                            id="partDescription" 
+                            placeholder="Enter part description (e.g., brake pad)"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <button id="searchBtn" class="search-btn">Search</button>
+                </div>
+                  <div id="batchProcessingPanel" class="panel hidden">
+                    <div class="file-upload-container">
+                        <p>Upload Excel (.xlsx, .xls) or CSV file containing part numbers and descriptions</p>
+                        <div class="file-format-info">
+                            <small>File should contain columns for part numbers and optionally part descriptions</small>
+                        </div>
+                        
+                        <div class="file-input-wrapper">
+                            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;" />
+                            <button type="button" id="fileSelectBtn" class="file-select-btn">
+                                <span class="file-icon">📁</span>
+                                Choose File
+                            </button>
+                            <div class="file-status" id="fileStatus">
+                                <div class="file-info" id="fileInfo">No file selected</div>
+                                <button type="button" id="clearFileBtn" class="clear-file-btn hidden">✕</button>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-actions">
+                            <button id="processBtn" class="process-btn" disabled>
+                                <span class="process-icon">⚙️</span>
+                                Process File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>            <div id="loadingIndicator" class="loading hidden">
+                <div class="spinner"></div>
+                <p id="loadingMessage">Processing part number...</p>
+            </div>            <div id="resultsSection" class="results-section hidden">
+                <h2>Search Results</h2>
+                <div id="executionTimeContainer" class="execution-time hidden">
+                    <p>Execution time: <span id="executionTime">0</span> seconds</p>
+                </div>
+                <div id="noResultsContainer" class="no-results hidden"></div>
+                <div id="manufacturerPartsContainer" class="manufacturer-parts hidden"></div>
+                <div id="remanufacturerPartsContainer" class="remanufacturer-parts hidden"></div>
+            </div>              <div id="batchResultsSection" class="batch-results-section hidden">
+                <h2>Batch Processing Results</h2>
+                <div id="batchExecutionTimeContainer" class="execution-time hidden">
+                    <p>Execution time: <span id="batchExecutionTime">0</span> seconds</p>
+                </div>
+                <div class="batch-summary">
+                    <div id="batchSummary"></div>
+                    <div class="batch-actions">
+                        <button id="downloadResultsBtn" class="download-btn hidden">
+                            <span class="download-icon">📥</span>
+                            Download Results (CSV)
+                        </button>
+                    </div>
+                </div>
+                <div id="batchResultsContainer"></div>
+            </div>
+
+            <div id="errorSection" class="error-section hidden">
+                <h3>Error</h3>
+                <p id="errorMessage"></p>
+            </div>
+        </main>
+
+
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

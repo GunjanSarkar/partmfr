@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Part Number Lookup System</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>    <div class="container">
+        <header>
+            <h1>Part Number Lookup System</h1>
+            <p>Enter a part number to search for manufacturer records or upload a file for batch processing</p>
+        </header>
+
+        <main>
+            <div class="search-section">
+                <div class="search-tabs">
+                    <button id="singleSearchTab" class="tab-btn active">Single Search</button>
+                    <button id="batchProcessingTab" class="tab-btn">Batch Processing</button>
+                </div>
+                  <div id="singleSearchPanel" class="panel">
+                    <div class="input-group">
+                        <input type="text" id="partNumber" placeholder="Enter part number (e.g., AB123-456)" required>
+                        <button id="searchBtn" class="btn btn-primary">Search</button>
+                    </div>
+                    <div id="loadingIndicator" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <span>Searching...</span>
+                    </div>
+                </div>
+
+                <div id="batchProcessingPanel" class="panel" style="display: none;">
+                    <div class="file-upload-section">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">📁</div>
+                            <h3>Upload Excel File</h3>
+                            <p>Drag and drop your Excel file here, or click to browse</p>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                            <button id="browseBtn" class="btn btn-secondary">Browse Files</button>
+                        </div>
+                        <div id="fileInfo" class="file-info" style="display: none;">
+                            <span id="fileName"></span>
+                            <button id="removeFile" class="btn btn-remove">Remove</button>
+                        </div>
+                        <div class="process-controls" style="display: none;" id="processControls">
+                            <button id="processBtn" class="btn btn-primary">Process File</button>
+                        </div>
+                    </div>
+                    <div id="batchLoadingIndicator" class="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <span>Processing file...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultsSection" class="results-section" style="display: none;">
+                <h2>Search Results</h2>
+                <div id="results"></div>
+            </div>
+
+            <div id="batchResultsSection" class="results-section" style="display: none;">
+                <h2>Processing Results</h2>
+                <div class="results-header">
+                    <span id="processedCount">0 parts processed</span>
+                    <button id="downloadBtn" class="btn btn-primary" style="display: none;">Download Results</button>
+                </div>
+                <div id="batchResults"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="./script.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+# Sensitive information
+.env
+.env.example
+.env.local
+.env.production
+.env.staging
+
+# Local context and test files
+context.txt
+test_*.py
+check_*.py
+add_indexes.py
+optimize_performance.py
+test_database.db
+test_prefix_suffix_fix.py
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cache folder
+cache/
+config/cache/
+
+# Local development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Github instructions
+.github/
+
+# Amplify configuration files (needed for deployment)
+!_redirects
+!_headers
+!static/index-amplify.html
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+logs/
+log/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Downloads folder
+static/downloads/
+
+# Temporary files
+*.tmp
+*.temp

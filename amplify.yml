@@ -1,0 +1,113 @@
+version: 1
+applications:
+  - appRoot: .
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - echo "Preparing frontend build environment..."
+            - node --version || echo "Node.js not available, using basic copy"
+        build:
+          commands:
+            - echo "Building static frontend assets..."
+            - mkdir -p dist
+            - cp -r static/* dist/
+            - echo "Using Amplify-specific HTML file..."
+            - mv dist/index-amplify.html dist/index.html
+            - echo "Copying Amplify configuration files..."
+            - cp _redirects dist/_redirects 2>/dev/null || echo "No _redirects file found"
+            - cp _headers dist/_headers 2>/dev/null || echo "No _headers file found"
+            - echo "Setting correct file permissions..."
+            - find dist -type f -name "*.css" -exec chmod 644 {} \;
+            - find dist -type f -name "*.js" -exec chmod 644 {} \;
+            - find dist -type f -name "*.html" -exec chmod 644 {} \;
+            - echo "Frontend build completed"
+            - ls -la dist/
+        postBuild:
+          commands:
+            - echo "Verifying static assets..."
+            - test -f dist/index.html && echo "✓ index.html found"
+            - test -f dist/styles.css && echo "✓ styles.css found"
+            - test -f dist/script.js && echo "✓ script.js found"
+            - echo "Post-build cleanup completed"
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - ~/.cache/pip/**/*
+    backend:
+      phases:
+        preBuild:
+          commands:
+            - echo "Setting up Python backend environment..."
+            - python --version
+            - pip --version
+            - echo "Installing backend dependencies..."
+            - pip install -r requirements.txt
+            - echo "Setting up environment variables..."
+        build:
+          commands:
+            - echo "Building backend application..."
+            - echo "Validating API endpoints..."
+            - python -c "from api.main import app; print('FastAPI app loaded successfully')"
+            - echo "Backend build completed"
+        postBuild:
+          commands:
+            - echo "Backend post-build completed"
+      artifacts:
+        baseDirectory: .
+        files:
+          - api/**/*
+          - src/**/*
+          - config/**/*
+          - tools/**/*
+          - start_api.py
+          - requirements.txt
+          - amplify.yml
+      cache:
+        paths:
+          - ~/.cache/pip/**/*
+    environment:
+      variables:
+        # Python configuration
+        PYTHONPATH: "."
+        PYTHON_VERSION: "3.11"
+        
+        # Application settings
+        ENV: "production"
+        DEBUG: "False"
+        
+        # FastAPI settings
+        FASTAPI_ENV: "production"
+        API_HOST: "0.0.0.0"
+        API_PORT: "8000"
+        
+        # Application specific
+        LANGCHAIN_TRACING_V2: "false"
+        LANGCHAIN_PROJECT: "motor-parts-api"
+        
+      # IMPORTANT: Set these sensitive variables in Amplify Console Environment Variables:
+      # - OPENAI_API_KEY: Your OpenAI API key
+      # - LANGCHAIN_API_KEY: Your LangChain API key  
+      # - SERVER_HOSTNAME: dbc-73ecee4a-e5cc.cloud.databricks.com
+      # - HTTP_PATH: /sql/1.0/warehouses/6d66dae205b7527d
+      # - ACCESS_TOKEN: Your Databricks access token
+      # - AWS_ACCESS_KEY_ID: Your AWS access key (if needed)
+      # - AWS_SECRET_ACCESS_KEY: Your AWS secret key (if needed)
+      # - AWS_SESSION_TOKEN: Your AWS session token (if needed)
+    
+    # Custom commands for container-based deployment
+    customCommands:
+      - echo "Starting Motor Parts Processing API..."
+      - python start_api.py &
+      - echo "API server started in background"
+      
+    # Health check configuration
+    healthCheck:
+      path: "/health"
+      intervalSeconds: 30
+      timeoutSeconds: 5
+      unhealthyThresholdCount: 3
+      healthyThresholdCount: 2
