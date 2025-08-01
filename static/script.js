@@ -227,6 +227,46 @@ class PartLookupApp {
     }
     
     /**
+     * Show a success message
+     */
+    showSuccessMessage(message) {
+        // Create success message element if it doesn't exist
+        let successSection = document.getElementById('successSection');
+        if (!successSection) {
+            successSection = document.createElement('div');
+            successSection.id = 'successSection';
+            successSection.className = 'success-section';
+            successSection.innerHTML = `
+                <div class="success-container">
+                    <h3>✅ Success</h3>
+                    <p id="successMessage"></p>
+                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" 
+                            style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; float: right; margin-top: -30px;">×</button>
+                </div>
+            `;
+            
+            // Insert after error section
+            const errorSection = document.getElementById('errorSection');
+            if (errorSection) {
+                errorSection.parentNode.insertBefore(successSection, errorSection.nextSibling);
+            } else {
+                document.querySelector('.container').appendChild(successSection);
+            }
+        }
+        
+        const successMessage = document.getElementById('successMessage');
+        if (successMessage) {
+            successMessage.textContent = message;
+            successSection.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                successSection.classList.add('hidden');
+            }, 5000);
+        }
+    }
+    
+    /**
      * Show the loading indicator
      */
     showLoading(message = 'Processing part number...') {
@@ -337,6 +377,13 @@ class PartLookupApp {
         
         const file = fileInput.files[0];
         
+        // Validate file type
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        if (!['csv', 'xlsx', 'xls'].includes(fileExtension)) {
+            this.showError('Invalid file type. Please select a CSV or Excel file.');
+            return;
+        }
+        
         this.showLoading('Processing batch file...');
         this.clearResults();
         this.clearError();
@@ -346,6 +393,8 @@ class PartLookupApp {
             const formData = new FormData();
             formData.append('file', file);
             
+            // First get the JSON response for display
+            this.showLoading('Analyzing file and processing parts...');
             const response = await fetch('/api/process-file?output_format=json', {
                 method: 'POST',
                 body: formData
@@ -378,14 +427,23 @@ class PartLookupApp {
             this.batchData = data;
             this.currentFileName = file.name;
             
+            // Display results
             this.displayBatchResults(data);
             this.displayBatchExecutionTime(data.execution_time);
             
-            // Show the download button now that we have results
+            // Show the download button and make CSV available immediately
             const downloadBtn = document.getElementById('downloadResultsBtn');
             if (downloadBtn) {
                 downloadBtn.classList.remove('hidden');
+                downloadBtn.textContent = '📄 Download CSV Results';
+                downloadBtn.style.background = '#28a745';
             }
+            
+            // Show success message with stats
+            this.showSuccessMessage(
+                `✅ Batch processing complete! Processed ${data.total_processed} parts 
+                (${data.successful} successful, ${data.failed} failed) in ${data.execution_time?.toFixed(2)}s`
+            );
             
         } catch (error) {
             this.showError(`Error: ${error.message}`);
@@ -535,40 +593,53 @@ class PartLookupApp {
             return;
         }
         
-        // Display summary
+        // Display summary with enhanced styling
         batchSummary.innerHTML = `
-            <div class="summary-item">
-                <span class="label">Total</span>
-                <span class="value">${data.total_processed}</span>
-            </div>
-            <div class="summary-item">
-                <span class="label">Successful</span>
-                <span class="value">${data.successful}</span>
-            </div>
-            <div class="summary-item">
-                <span class="label">Failed</span>
-                <span class="value">${data.failed}</span>
+            <div class="summary-stats">
+                <div class="summary-item success">
+                    <span class="label">✅ Total Processed</span>
+                    <span class="value">${data.total_processed}</span>
+                </div>
+                <div class="summary-item success">
+                    <span class="label">✅ Successful</span>
+                    <span class="value">${data.successful}</span>
+                </div>
+                <div class="summary-item ${data.failed > 0 ? 'error' : 'success'}">
+                    <span class="label">${data.failed > 0 ? '❌' : '✅'} Failed</span>
+                    <span class="value">${data.failed}</span>
+                </div>
+                <div class="summary-item info">
+                    <span class="label">⏱️ Processing Time</span>
+                    <span class="value">${data.execution_time?.toFixed(2)}s</span>
+                </div>
             </div>
         `;
         
-        // Create results table
+        // Create enhanced results table
         let html = `
-        <table class="batch-results-table">
+        <div class="batch-actions">
+            <div class="detected-columns-info">
+                <h4>📋 Processing Summary</h4>
+                <p>✅ Auto-detected part number and description columns from your file</p>
+                <p>📊 Processed ${data.total_processed} rows with ${data.successful} successful matches</p>
+            </div>
+        </div>
+        <table class="batch-results-table enhanced">
             <thead>
                 <tr>
-                    <th>Original Part</th>
-                    <th>Description</th>
-                    <th>Cleaned Part</th>
-                    <th>Status</th>
-                    <th>Results Found</th>
-                    <th>Actions</th>
+                    <th style="width: 20%">🔧 Original Part</th>
+                    <th style="width: 25%">📝 Description</th>
+                    <th style="width: 15%">🧹 Cleaned Part</th>
+                    <th style="width: 10%">📊 Status</th>
+                    <th style="width: 15%">📈 Results Found</th>
+                    <th style="width: 15%">🔍 Actions</th>
                 </tr>
             </thead>
             <tbody>
         `;
         
         if (data.results && data.results.length > 0) {
-            data.results.forEach(resultItem => {
+            data.results.forEach((resultItem, index) => {
                 const part_number = resultItem.part_number || 'N/A';
                 const description = resultItem.description || 'N/A';
                 const result = resultItem.result || {};
@@ -578,21 +649,50 @@ class PartLookupApp {
                 const remanufacturer_variants = result.remanufacturer_variants || [];
                 const resultCount = filtered_results.length + remanufacturer_variants.length;
                 
+                // Determine row styling based on status
+                let rowClass = 'neutral';
+                let statusIcon = '⚠️';
+                if (status === 'success' && resultCount > 0) {
+                    rowClass = 'success';
+                    statusIcon = '✅';
+                } else if (status === 'error') {
+                    rowClass = 'error';
+                    statusIcon = '❌';
+                }
+                
                 html += `
-                <tr class="${status === 'success' ? 'success' : 'error'}">
-                    <td class="part-number-cell">${part_number}</td>
-                    <td class="description-cell">${description}</td>
-                    <td class="cleaned-part-cell">${cleaned_part}</td>
+                <tr class="${rowClass}" data-row-index="${index}">
+                    <td class="part-number-cell">
+                        <div class="part-info">
+                            <span class="part-text">${this.escapeHtml(part_number)}</span>
+                        </div>
+                    </td>
+                    <td class="description-cell">
+                        <div class="description-text" title="${this.escapeHtml(description)}">
+                            ${this.escapeHtml(this.truncateText(description, 50))}
+                        </div>
+                    </td>
+                    <td class="cleaned-part-cell">
+                        <span class="cleaned-text">${this.escapeHtml(cleaned_part)}</span>
+                    </td>
                     <td class="status-cell">
-                        <span class="status-badge ${status === 'success' ? 'success' : 'error'}">
-                            ${status}
+                        <span class="status-badge ${rowClass}">
+                            ${statusIcon} ${status}
                         </span>
                     </td>
                     <td class="results-count-cell">
-                        ${resultCount > 0 ? `<span class="results-count">${resultCount} results</span>` : '<span class="no-results">No results</span>'}
+                        ${resultCount > 0 ? 
+                            `<span class="results-count success">🎯 ${resultCount} match${resultCount !== 1 ? 'es' : ''}</span>` : 
+                            '<span class="no-results">❌ No results</span>'
+                        }
                     </td>
                     <td class="actions-cell">
-                        ${resultCount > 0 ? `<button class="details-btn" data-part="${part_number}">View Details</button>` : ''}
+                        ${resultCount > 0 ? 
+                            `<button class="details-btn" data-part="${this.escapeHtml(part_number)}" title="View detailed results">
+                                👁️ View Details
+                            </button>` : 
+                            '<span class="no-action">-</span>'
+                        }
                     </td>
                 </tr>
                 `;
@@ -600,30 +700,36 @@ class PartLookupApp {
                 // Add collapsible details section
                 if (status === 'success' && resultCount > 0) {
                     html += `
-                    <tr class="details-row hidden" id="details-${part_number}">
+                    <tr class="details-row hidden" id="details-${this.escapeHtml(part_number)}">
                         <td colspan="6">
-                            <div class="details-content">
+                            <div class="details-content enhanced">
+                                <div class="details-header">
+                                    <h4>🔍 Detailed Results for "${this.escapeHtml(part_number)}"</h4>
+                                    <button class="close-details" onclick="this.closest('.details-row').classList.add('hidden')">✕</button>
+                                </div>
                     `;
                     
                     // Add manufacturer parts
                     if (filtered_results && filtered_results.length > 0) {
-                        html += `<h4>Manufacturer Parts (${filtered_results.length})</h4>
-                        <div class="details-grid">`;
+                        html += `
+                        <div class="results-section">
+                            <h5>🏭 Manufacturer Parts (${filtered_results.length})</h5>
+                            <div class="details-grid enhanced">`;
                         
                         filtered_results.forEach(part => {
                             html += `
-                            <div class="detail-card">
+                            <div class="detail-card manufacturer">
                                 <div class="detail-header">
-                                    <span class="part-number">${part.PARTNUMBER}</span>
-                                    <span class="class-badge">${part.CLASS}</span>
+                                    <span class="part-number">${this.escapeHtml(part.PARTNUMBER)}</span>
+                                    <span class="class-badge">${this.escapeHtml(part.CLASS)}</span>
                                 </div>
                                 <div class="detail-body">
-                                    <p><strong>Manufacturer:</strong> ${part.PARTMFR || 'Unknown'}</p>
-                                    <p><strong>Description:</strong> ${part.partdesc || 'No description'}</p>
-                                    <p><strong>Part ID:</strong> ${part.PARTINDEX}</p>
-                                    ${part.confidence ? `<p><strong>Confidence:</strong> ${Math.round(part.confidence * 100)}%</p>` : ''}
+                                    <p><strong>🏭 Manufacturer:</strong> ${this.escapeHtml(part.PARTMFR || 'Unknown')}</p>
+                                    <p><strong>📝 Description:</strong> ${this.escapeHtml(part.partdesc || 'No description')}</p>
+                                    <p><strong>🆔 Part ID:</strong> ${this.escapeHtml(part.PARTINDEX)}</p>
+                                    ${part.confidence ? `<p><strong>📊 Confidence:</strong> <span class="confidence-score">${Math.round(part.confidence * 100)}%</span></p>` : ''}
                                     ${part.cocode ? `<div class="scoring-info">
-                                        <span class="confidence-code">Code: ${part.cocode}</span>
+                                        <span class="confidence-code">📈 Code: ${this.escapeHtml(part.cocode)}</span>
                                         <span class="scores">Part: ${part.part_number_score || 0}/5 | Desc: ${part.description_score || 0}/5 | Noise: ${part.noise_detected === 1 ? 'Yes' : 'No'}</span>
                                     </div>` : ''}
                                 </div>
@@ -631,29 +737,31 @@ class PartLookupApp {
                             `;
                         });
                         
-                        html += `</div>`;
+                        html += `</div></div>`;
                     }
                     
                     // Add remanufacturer parts
                     if (remanufacturer_variants && remanufacturer_variants.length > 0) {
-                        html += `<h4>Remanufacturer Variants (${remanufacturer_variants.length})</h4>
-                        <div class="details-grid">`;
+                        html += `
+                        <div class="results-section">
+                            <h5>🔄 Remanufacturer Variants (${remanufacturer_variants.length})</h5>
+                            <div class="details-grid enhanced">`;
                         
                         remanufacturer_variants.forEach(part => {
                             html += `
                             <div class="detail-card variant">
                                 <div class="detail-header">
-                                    <span class="part-number">${part.PARTNUMBER}</span>
-                                    <span class="class-badge">${part.CLASS}</span>
+                                    <span class="part-number">${this.escapeHtml(part.PARTNUMBER)}</span>
+                                    <span class="class-badge variant">${this.escapeHtml(part.CLASS)}</span>
                                 </div>
                                 <div class="detail-body">
-                                    <p><strong>Manufacturer:</strong> ${part.PARTMFR || 'Unknown'}</p>
-                                    <p><strong>Description:</strong> ${part.partdesc || 'No description'}</p>
-                                    <p><strong>Part ID:</strong> ${part.PARTINDEX}</p>
-                                    <p><strong>Original Part:</strong> ${part.original_part || 'Unknown'}</p>
-                                    ${part.similarity ? `<p><strong>Similarity:</strong> ${Math.round(part.similarity * 100)}%</p>` : ''}
+                                    <p><strong>🏭 Manufacturer:</strong> ${this.escapeHtml(part.PARTMFR || 'Unknown')}</p>
+                                    <p><strong>📝 Description:</strong> ${this.escapeHtml(part.partdesc || 'No description')}</p>
+                                    <p><strong>🆔 Part ID:</strong> ${this.escapeHtml(part.PARTINDEX)}</p>
+                                    <p><strong>🔄 Original Part:</strong> ${this.escapeHtml(part.original_part || 'Unknown')}</p>
+                                    ${part.similarity ? `<p><strong>🎯 Similarity:</strong> <span class="similarity-score">${Math.round(part.similarity * 100)}%</span></p>` : ''}
                                     ${part.cocode ? `<div class="scoring-info">
-                                        <span class="confidence-code">Code: ${part.cocode}</span>
+                                        <span class="confidence-code">📈 Code: ${this.escapeHtml(part.cocode)}</span>
                                         <span class="scores">Part: ${part.part_number_score || 0}/5 | Desc: ${part.description_score || 0}/5 | Noise: ${part.noise_detected === 1 ? 'Yes' : 'No'}</span>
                                     </div>` : ''}
                                 </div>
@@ -661,7 +769,7 @@ class PartLookupApp {
                             `;
                         });
                         
-                        html += `</div>`;
+                        html += `</div></div>`;
                     }
                     
                     html += `
@@ -674,7 +782,12 @@ class PartLookupApp {
         } else {
             html += `
             <tr>
-                <td colspan="6" class="no-results">No results available</td>
+                <td colspan="6" class="no-results-message">
+                    <div class="empty-state">
+                        <p>❌ No results available</p>
+                        <small>Please check your file format and try again</small>
+                    </div>
+                </td>
             </tr>
             `;
         }
@@ -684,7 +797,6 @@ class PartLookupApp {
         </table>
         `;
         
-        // We don't need to add a download button since it already exists in the HTML
         batchResultsContainer.innerHTML = html;
         batchResultsSection.classList.remove('hidden');
     }
@@ -763,7 +875,7 @@ class PartLookupApp {
 
         try {
             // Show loading for download
-            this.showLoading('Preparing CSV download...');
+            this.showLoading('Generating CSV file...');
 
             // Generate CSV content directly from stored results
             const csvContent = this.generateCSVFromResults(this.batchData.results);
@@ -776,12 +888,16 @@ class PartLookupApp {
             const downloadLink = document.createElement('a');
             downloadLink.href = url;
             downloadLink.download = this.currentFileName.replace(/\.[^/.]+$/, '') + '_results.csv';
+            downloadLink.style.display = 'none';
             document.body.appendChild(downloadLink);
             downloadLink.click();
             document.body.removeChild(downloadLink);
             
             // Clean up the URL
             window.URL.revokeObjectURL(url);
+            
+            // Show success message
+            this.showSuccessMessage(`✅ CSV file downloaded successfully! Check your downloads folder for "${downloadLink.download}"`);
 
         } catch (error) {
             this.showError(`Error downloading CSV: ${error.message}`);
@@ -791,58 +907,119 @@ class PartLookupApp {
     }
 
     /**
-     * Create FormData from stored results (fallback method)
-     */
-    /**
-     * Generate CSV content from stored results
+     * Generate CSV content from stored results with enhanced format
      */
     generateCSVFromResults(results) {
-        // Define CSV headers in the exact order required
+        // Define CSV headers with more comprehensive data
         const headers = [
             'input_part_number',
             'input_description', 
             'cleaned_part_number',
+            'processing_status',
+            'results_found',
+            'manufacturer_parts_count',
+            'remanufacturer_parts_count',
+            'part_number',
+            'class',
+            'manufacturer',
+            'part_description',
+            'part_id',
+            'confidence_percentage',
             'part_number_score',
             'description_score',
             'noise_detected',
-            'cocode',
-            'PARTINDEX',
-            'CLASS',
-            'PARTMFR',
-            'PARTNUMBER', 
-            'SPARTNUMBER',
-            'partdesc',
-            'classification',
-            'execution_time_ms',
-            'success',
-            'error_message'
+            'confidence_code',
+            'is_remanufacturer',
+            'original_part',
+            'similarity_percentage',
+            'execution_time_ms'
         ];
 
         // Create CSV content starting with headers
         let csvContent = headers.join(',') + '\n';
 
         // Add each result row
-        results.forEach(result => {
-            const row = [
-                this.escapeCSVField(result.input_part_number || ''),
-                this.escapeCSVField(result.input_description || ''),
-                this.escapeCSVField(result.cleaned_part_number || ''),
-                result.part_number_score || '',
-                result.description_score || '',
-                result.noise_detected || 0,
-                result.cocode || '',
-                result.PARTINDEX || '',
-                this.escapeCSVField(result.CLASS || ''),
-                this.escapeCSVField(result.PARTMFR || ''),
-                this.escapeCSVField(result.PARTNUMBER || ''),
-                this.escapeCSVField(result.SPARTNUMBER || ''),
-                this.escapeCSVField(result.partdesc || ''),
-                this.escapeCSVField(result.classification || ''),
-                result.execution_time_ms || '',
-                result.success || '',
-                this.escapeCSVField(result.error_message || '')
-            ];
-            csvContent += row.join(',') + '\n';
+        results.forEach(resultItem => {
+            const part_number = resultItem.part_number || '';
+            const description = resultItem.description || '';
+            const result = resultItem.result || {};
+            const status = result.status || 'failed';
+            const cleaned_part = result.cleaned_part || '';
+            const filtered_results = result.filtered_results || [];
+            const remanufacturer_variants = result.remanufacturer_variants || [];
+            
+            const totalResults = filtered_results.length + remanufacturer_variants.length;
+            
+            if (totalResults === 0) {
+                // No results found - single row
+                const row = [
+                    this.escapeCSVField(part_number),
+                    this.escapeCSVField(description),
+                    this.escapeCSVField(cleaned_part),
+                    this.escapeCSVField(status),
+                    '0',
+                    '0',
+                    '0',
+                    '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+                ];
+                csvContent += row.join(',') + '\n';
+            } else {
+                // Add rows for manufacturer parts
+                filtered_results.forEach(part => {
+                    const row = [
+                        this.escapeCSVField(part_number),
+                        this.escapeCSVField(description),
+                        this.escapeCSVField(cleaned_part),
+                        this.escapeCSVField(status),
+                        totalResults.toString(),
+                        filtered_results.length.toString(),
+                        remanufacturer_variants.length.toString(),
+                        this.escapeCSVField(part.PARTNUMBER || ''),
+                        this.escapeCSVField(part.CLASS || ''),
+                        this.escapeCSVField(part.PARTMFR || ''),
+                        this.escapeCSVField(part.partdesc || ''),
+                        this.escapeCSVField(part.PARTINDEX || ''),
+                        part.confidence ? `${Math.round(part.confidence * 100)}%` : '',
+                        part.part_number_score || '',
+                        part.description_score || '',
+                        part.noise_detected === 1 ? 'Yes' : 'No',
+                        this.escapeCSVField(part.cocode || ''),
+                        'No',
+                        '',
+                        '',
+                        ''
+                    ];
+                    csvContent += row.join(',') + '\n';
+                });
+                
+                // Add rows for remanufacturer parts
+                remanufacturer_variants.forEach(part => {
+                    const row = [
+                        this.escapeCSVField(part_number),
+                        this.escapeCSVField(description),
+                        this.escapeCSVField(cleaned_part),
+                        this.escapeCSVField(status),
+                        totalResults.toString(),
+                        filtered_results.length.toString(),
+                        remanufacturer_variants.length.toString(),
+                        this.escapeCSVField(part.PARTNUMBER || ''),
+                        this.escapeCSVField(part.CLASS || ''),
+                        this.escapeCSVField(part.PARTMFR || ''),
+                        this.escapeCSVField(part.partdesc || ''),
+                        this.escapeCSVField(part.PARTINDEX || ''),
+                        '',
+                        part.part_number_score || '',
+                        part.description_score || '',
+                        part.noise_detected === 1 ? 'Yes' : 'No',
+                        this.escapeCSVField(part.cocode || ''),
+                        'Yes',
+                        this.escapeCSVField(part.original_part || ''),
+                        part.similarity ? `${Math.round(part.similarity * 100)}%` : '',
+                        ''
+                    ];
+                    csvContent += row.join(',') + '\n';
+                });
+            }
         });
 
         return csvContent;
@@ -866,16 +1043,24 @@ class PartLookupApp {
         return stringField;
     }
 
-    createFormDataFromResults() {
-        // This is a fallback - ideally we'd convert stored JSON results to CSV directly
-        // For now, we'll need to re-upload the file, but we could enhance this later
-        const fileInput = document.getElementById('fileInput');
-        if (fileInput && fileInput.files && fileInput.files[0]) {
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            return formData;
+    /**
+     * Truncate text to specified length with ellipsis
+     */
+    truncateText(text, maxLength) {
+        if (!text || text.length <= maxLength) {
+            return text;
         }
-        throw new Error('Original file not available for CSV generation');
+        return text.substring(0, maxLength) + '...';
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
