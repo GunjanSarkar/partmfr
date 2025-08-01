@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motor Part Lookup System - Demo</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .demo-notice {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .demo-notice h2 {
+            margin-top: 0;
+            font-size: 1.8em;
+        }
+        .demo-notice p {
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+        .demo-notice .github-link {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 12px 24px;
+            border-radius: 5px;
+            color: white;
+            text-decoration: none;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+        .demo-notice .github-link:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .disabled-input {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .setup-instructions {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .setup-instructions h3 {
+            color: #495057;
+            margin-top: 0;
+        }
+        .setup-instructions code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .setup-instructions pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="demo-notice">
+            <h2>🚀 Motor Part Lookup System - Live Demo</h2>
+            <p>This is a demo interface for the Motor Parts Lookup API. The full system requires a Python backend with database access.</p>
+            <a href="https://github.com/GunjanSarkar/partmfr" class="github-link" target="_blank">
+                📂 View Source Code on GitHub
+            </a>
+            <a href="https://github.com/GunjanSarkar/partmfr#readme" class="github-link" target="_blank">
+                📖 Setup Instructions
+            </a>
+        </div>
+
+        <header>
+            <h1>Motor Part Lookup System</h1>
+            <p>Advanced part number search with bidirectional sliding window technology</p>
+        </header>
+
+        <div class="tab-container">
+            <button class="tab-btn active" id="singleSearchTab">Single Part Search</button>
+            <button class="tab-btn" id="batchProcessingTab">Batch Processing</button>
+        </div>
+
+        <!-- Single Search Panel -->
+        <div class="search-panel" id="singleSearchPanel">
+            <div class="search-container">
+                <div class="input-group">
+                    <label for="partNumber">Part Number *</label>
+                    <input type="text" id="partNumber" placeholder="Enter part number (e.g., GR01-6621-L6)" class="disabled-input" disabled>
+                </div>
+                
+                <div class="input-group">
+                    <label for="partDescription">Part Description (Optional)</label>
+                    <input type="text" id="partDescription" placeholder="Enter part description for better matching" class="disabled-input" disabled>
+                </div>
+                
+                <button id="searchBtn" class="btn btn-primary disabled-input" disabled>
+                    <span class="btn-icon">🔍</span>
+                    Search Parts
+                </button>
+            </div>
+        </div>
+
+        <!-- Batch Processing Panel -->
+        <div class="search-panel hidden" id="batchProcessingPanel">
+            <div class="upload-container">
+                <div class="file-upload-area disabled-input">
+                    <div class="upload-icon">📁</div>
+                    <p>Drag and drop your CSV/Excel file here</p>
+                    <p class="file-requirements">Supported formats: CSV, XLSX, XLS</p>
+                    <button class="btn btn-secondary disabled-input" id="fileSelectBtn" disabled>
+                        <span class="file-icon">📁</span>Choose File
+                    </button>
+                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;" disabled>
+                </div>
+                
+                <div class="file-info" id="fileInfo">No file selected</div>
+                
+                <div class="upload-actions">
+                    <button class="btn btn-secondary disabled-input" id="clearFileBtn" disabled>Clear File</button>
+                    <button class="btn btn-primary disabled-input" id="processBtn" disabled>
+                        <span class="btn-icon">⚡</span>
+                        Process File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Instructions -->
+        <div class="setup-instructions">
+            <h3>🛠️ How to Run the Full System Locally</h3>
+            <p>To use the complete Motor Parts Lookup system with all features:</p>
+            
+            <h4>1. Clone the Repository</h4>
+            <pre><code>git clone https://github.com/GunjanSarkar/partmfr.git
+cd partmfr</code></pre>
+
+            <h4>2. Install Dependencies</h4>
+            <pre><code>python -m venv venv
+venv\Scripts\activate  # On Windows
+pip install -r requirements.txt</code></pre>
+
+            <h4>3. Configure Environment</h4>
+            <p>Copy <code>.env.template</code> to <code>.env</code> and configure your database credentials.</p>
+
+            <h4>4. Start the API</h4>
+            <pre><code>python start_api.py</code></pre>
+
+            <h4>5. Access the Interface</h4>
+            <p>Open <code>http://localhost:8000</code> in your browser to use the full system.</p>
+
+            <h3>📋 Features</h3>
+            <ul>
+                <li>🔍 Advanced part number search with fuzzy matching</li>
+                <li>⚡ Bidirectional sliding window algorithm</li>
+                <li>📊 Batch processing with CSV/Excel support</li>
+                <li>🏷️ Intelligent scoring and confidence ratings</li>
+                <li>🔄 Remanufacturer variant detection</li>
+                <li>📈 Real-time processing with early termination</li>
+            </ul>
+        </div>
+
+        <!-- Demo Results Section -->
+        <div class="results-section hidden" id="resultsSection">
+            <h2>Search Results</h2>
+            <div class="demo-notice">
+                <p>🚧 This is a demo interface. Results would appear here in the full system.</p>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="loading-indicator hidden" id="loadingIndicator">
+            <div class="loading-spinner"></div>
+            <div class="loading-message" id="loadingMessage">Processing part number...</div>
+        </div>
+
+        <!-- Error Section -->
+        <div class="error-section hidden" id="errorSection">
+            <div class="error-container">
+                <h3>Error</h3>
+                <p id="errorMessage"></p>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Motor Part Lookup System. 
+           <a href="https://github.com/GunjanSarkar/partmfr" target="_blank">GitHub Repository</a>
+        </p>
+    </footer>
+
+    <script>
+        // Simple demo functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            // Tab switching functionality
+            const singleSearchTab = document.getElementById('singleSearchTab');
+            const batchProcessingTab = document.getElementById('batchProcessingTab');
+            const singleSearchPanel = document.getElementById('singleSearchPanel');
+            const batchProcessingPanel = document.getElementById('batchProcessingPanel');
+
+            singleSearchTab.addEventListener('click', () => {
+                singleSearchTab.classList.add('active');
+                batchProcessingTab.classList.remove('active');
+                singleSearchPanel.classList.remove('hidden');
+                batchProcessingPanel.classList.add('hidden');
+            });
+
+            batchProcessingTab.addEventListener('click', () => {
+                batchProcessingTab.classList.add('active');
+                singleSearchTab.classList.remove('active');
+                batchProcessingPanel.classList.remove('hidden');
+                singleSearchPanel.classList.add('hidden');
+            });
+
+            // Show info when trying to interact with disabled elements
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('disabled-input') || e.target.closest('.disabled-input')) {
+                    alert('This is a demo interface. Clone the repository and run locally to use the full functionality!');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

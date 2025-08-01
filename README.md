@@ -2,6 +2,12 @@
 
 A system for processing motor part numbers using bidirectional sliding window search, cleaning them to match database formats, and finding parts information based on various classification criteria.
 
+## 🚀 Live Demo
+
+**[View Live Demo on GitHub Pages](https://gunjansarkar.github.io/partmfr/)**
+
+The live demo shows the interface and provides setup instructions. To use the full functionality, clone and run locally as described below.
+
 ## Features
 
 - **Bidirectional Sliding Window**: Improved part number matching by generating candidates from both the beginning and end of the input
